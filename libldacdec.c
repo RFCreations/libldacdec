@@ -111,111 +111,111 @@ static const uint8_t ga_nqus_ldac[LDAC_MAXNBANDS+1] = {
 };
 
 
-int ldacdecInit( ldacdec_t *this )
+int ldacdecInit( ldacdec_t *handle )
 {
     InitHuffmanCodebooks();
     InitMdct();
 
-    memset( &this->frame.channels[0].mdct, 0, sizeof( Mdct ) ); 
-    memset( &this->frame.channels[1].mdct, 0, sizeof( Mdct ) );
+    memset( &handle->frame.channels[0].mdct, 0, sizeof( Mdct ) ); 
+    memset( &handle->frame.channels[1].mdct, 0, sizeof( Mdct ) );
     
-    this->frame.channels[0].frame = &this->frame;
-    this->frame.channels[1].frame = &this->frame;
+    handle->frame.channels[0].frame = &handle->frame;
+    handle->frame.channels[1].frame = &handle->frame;
 
     return 0;
 }
 
-static int decodeBand( frame_t *this, BitReaderCxt *br )
+static int decodeBand( frame_t *handle, BitReaderCxt *br )
 {
-    this->nbrBands = ReadInt( br, LDAC_NBANDBITS ) + LDAC_BAND_OFFSET;
-    LOG("nbrBands:        %d\n", this->nbrBands );
+    handle->nbrBands = ReadInt( br, LDAC_NBANDBITS ) + LDAC_BAND_OFFSET;
+    LOG("nbrBands:        %d\n", handle->nbrBands );
     ReadInt( br, LDAC_FLAGBITS ); // unused
 
-    this->quantizationUnitCount = ga_nqus_ldac[this->nbrBands];
+    handle->quantizationUnitCount = ga_nqus_ldac[handle->nbrBands];
     return 0;
 }
 
-static int decodeGradient( frame_t *this, BitReaderCxt *br )
+static int decodeGradient( frame_t *handle, BitReaderCxt *br )
 {
-    this->gradientMode = ReadInt( br, LDAC_GRADMODEBITS );
-    if( this->gradientMode == LDAC_MODE_0 )
+    handle->gradientMode = ReadInt( br, LDAC_GRADMODEBITS );
+    if( handle->gradientMode == LDAC_MODE_0 )
     {
-        this->gradientStartUnit  = ReadInt( br, LDAC_GRADQU0BITS );
-        this->gradientEndUnit    = ReadInt( br, LDAC_GRADQU0BITS ) + 1;
-        this->gradientStartValue = ReadInt( br, LDAC_GRADOSBITS );
-        this->gradientEndValue   = ReadInt( br, LDAC_GRADOSBITS );
+        handle->gradientStartUnit  = ReadInt( br, LDAC_GRADQU0BITS );
+        handle->gradientEndUnit    = ReadInt( br, LDAC_GRADQU0BITS ) + 1;
+        handle->gradientStartValue = ReadInt( br, LDAC_GRADOSBITS );
+        handle->gradientEndValue   = ReadInt( br, LDAC_GRADOSBITS );
         LOG("gradient\n\tqu [%3d,%3d]\n\tvalue [%3d,%3d]\n", 
-                this->gradientStartUnit, this->gradientEndUnit, 
-                this->gradientStartValue, this->gradientEndValue );
+                handle->gradientStartUnit, handle->gradientEndUnit, 
+                handle->gradientStartValue, handle->gradientEndValue );
     } else
     {
-        this->gradientStartUnit  = ReadInt( br, LDAC_GRADQU1BITS );
-        this->gradientEndUnit    = 26;
-        this->gradientStartValue = ReadInt( br, LDAC_GRADOSBITS );
-        this->gradientEndValue   = 31;
+        handle->gradientStartUnit  = ReadInt( br, LDAC_GRADQU1BITS );
+        handle->gradientEndUnit    = 26;
+        handle->gradientStartValue = ReadInt( br, LDAC_GRADOSBITS );
+        handle->gradientEndValue   = 31;
         LOG("gradient\n\tqu [%3d,%3d\n\tvalue [%3d,%3d]\n", 
-                this->gradientStartUnit, this->gradientEndUnit, 
-                this->gradientStartValue, this->gradientEndValue );
+                handle->gradientStartUnit, handle->gradientEndUnit, 
+                handle->gradientStartValue, handle->gradientEndValue );
     }
     
-    this->gradientBoundary = ReadInt( br, LDAC_NADJQUBITS );
+    handle->gradientBoundary = ReadInt( br, LDAC_NADJQUBITS );
     return 0;
 }
 
-static void calculateGradient( frame_t *this )
+static void calculateGradient( frame_t *handle )
 {
-    int valueCount = this->gradientEndValue - this->gradientStartValue;
-    int unitCount = this->gradientEndUnit - this->gradientStartUnit;
+    int valueCount = handle->gradientEndValue - handle->gradientStartValue;
+    int unitCount = handle->gradientEndUnit - handle->gradientStartUnit;
     
-    memset( this->gradient, 0, sizeof( this->gradient ) );
+    memset( handle->gradient, 0, sizeof( handle->gradient ) );
 
-    for( int i=0; i<this->gradientEndUnit; ++i )
-        this->gradient[i] = -this->gradientStartValue;
-    for( int i=this->gradientEndUnit; i<this->quantizationUnitCount; ++i )
-        this->gradient[i] = -this->gradientEndValue;
+    for( int i=0; i<handle->gradientEndUnit; ++i )
+        handle->gradient[i] = -handle->gradientStartValue;
+    for( int i=handle->gradientEndUnit; i<handle->quantizationUnitCount; ++i )
+        handle->gradient[i] = -handle->gradientEndValue;
 
     if( unitCount > 0 )
     {
         const uint8_t *curve = gradientCurves[unitCount-1];
         if(  valueCount > 0 )
         {
-            for( int i=this->gradientStartUnit; i<this->gradientEndUnit; ++i )
+            for( int i=handle->gradientStartUnit; i<handle->gradientEndUnit; ++i )
             {
-                this->gradient[i] -= ((curve[i-this->gradientStartUnit] * (valueCount-1)) >> 8) + 1;
+                handle->gradient[i] -= ((curve[i-handle->gradientStartUnit] * (valueCount-1)) >> 8) + 1;
             }
         } else if( valueCount < 0 )
         {
-            for( int i=this->gradientStartUnit; i<this->gradientEndUnit; ++i )
+            for( int i=handle->gradientStartUnit; i<handle->gradientEndUnit; ++i )
             {
-                this->gradient[i] -= ((curve[i-this->gradientStartUnit] * (valueCount-1)) >> 8) + 1;
+                handle->gradient[i] -= ((curve[i-handle->gradientStartUnit] * (valueCount-1)) >> 8) + 1;
             }
         }
     }
     
-    LOG_ARRAY_LEN( this->gradient, "%3d, ", this->quantizationUnitCount );
+    LOG_ARRAY_LEN( handle->gradient, "%3d, ", handle->quantizationUnitCount );
 }
 
-static void calculatePrecisionMask(channel_t* this)
+static void calculatePrecisionMask(channel_t* handle)
 {
-	memset(this->precisionMask, 0, sizeof(this->precisionMask));
-	for (int i = 1; i < this->frame->quantizationUnitCount; i++)
+	memset(handle->precisionMask, 0, sizeof(handle->precisionMask));
+	for (int i = 1; i < handle->frame->quantizationUnitCount; i++)
 	{
-		const int delta = this->scaleFactors[i] - this->scaleFactors[i - 1];
+		const int delta = handle->scaleFactors[i] - handle->scaleFactors[i - 1];
 		if (delta > 1)
 		{
-			this->precisionMask[i] += min(delta - 1, 5);
+			handle->precisionMask[i] += LDAC_MIN(delta - 1, 5);
 		}
 		else if (delta < -1)
 		{
-			this->precisionMask[i - 1] += min(delta * -1 - 1, 5);
+			handle->precisionMask[i - 1] += LDAC_MIN(delta * -1 - 1, 5);
 		}
 	}
 }
 
 
-static void calculatePrecisions( channel_t *this )
+static void calculatePrecisions( channel_t *handle )
 {
-    frame_t *frame = this->frame;
+    frame_t *frame = handle->frame;
     
     for( int i=0; i<frame->quantizationUnitCount; ++i )
     {
@@ -223,36 +223,36 @@ static void calculatePrecisions( channel_t *this )
         {
             case LDAC_MODE_0:
             {
-                int precision = this->scaleFactors[i] + frame->gradient[i];
-                precision = max( precision, LDAC_MINIDWL1 );
-                this->precisions[i] = precision;
+                int precision = handle->scaleFactors[i] + frame->gradient[i];
+                precision = LDAC_MAX( precision, LDAC_MINIDWL1 );
+                handle->precisions[i] = precision;
                 break;
             }
             case LDAC_MODE_1:
             {
-                int precision = this->scaleFactors[i] + frame->gradient[i] + this->precisionMask[i];
+                int precision = handle->scaleFactors[i] + frame->gradient[i] + handle->precisionMask[i];
                 if( precision > 0 )
                     precision /= 2;
-                precision = max( precision, LDAC_MINIDWL1 );
-                this->precisions[i] = precision;
+                precision = LDAC_MAX( precision, LDAC_MINIDWL1 );
+                handle->precisions[i] = precision;
                 break;
             }
             case LDAC_MODE_2:
             {
-                int precision = this->scaleFactors[i] + frame->gradient[i] + this->precisionMask[i];
+                int precision = handle->scaleFactors[i] + frame->gradient[i] + handle->precisionMask[i];
                 if( precision > 0 )
                     precision = ( precision * 3 ) / 8;
-                precision = max( precision, LDAC_MINIDWL1 );
-                this->precisions[i] = precision;
+                precision = LDAC_MAX( precision, LDAC_MINIDWL1 );
+                handle->precisions[i] = precision;
                 break;
             }
             case LDAC_MODE_3:
             {
-                int precision = this->scaleFactors[i] + frame->gradient[i] + this->precisionMask[i];
+                int precision = handle->scaleFactors[i] + frame->gradient[i] + handle->precisionMask[i];
                 if( precision > 0 )
                     precision /= 4;
-                precision = max( precision, LDAC_MINIDWL1 );
-                this->precisions[i] = precision;
+                precision = LDAC_MAX( precision, LDAC_MINIDWL1 );
+                handle->precisions[i] = precision;
                 break;
             }
             default:
@@ -263,104 +263,104 @@ static void calculatePrecisions( channel_t *this )
     
     for( int i=0; i<frame->gradientBoundary; ++i )
     {
-        this->precisions[i]++;
+        handle->precisions[i]++;
     }
 
     for( int i=0; i<frame->quantizationUnitCount; ++i )
     {
-        this->precisionsFine[i] = 0;
-        if( this->precisions[i] > LDAC_MAXIDWL1 )
+        handle->precisionsFine[i] = 0;
+        if( handle->precisions[i] > LDAC_MAXIDWL1 )
         {
-            this->precisionsFine[i] = this->precisions[i] - LDAC_MAXIDWL1;
-            this->precisions[i] = LDAC_MAXIDWL1;
+            handle->precisionsFine[i] = handle->precisions[i] - LDAC_MAXIDWL1;
+            handle->precisions[i] = LDAC_MAXIDWL1;
         }
     }
 
-    LOG_ARRAY_LEN( this->precisions, "%3d, ", frame->quantizationUnitCount );
-    LOG_ARRAY_LEN( this->precisionsFine, "%3d, ", frame->quantizationUnitCount );
+    LOG_ARRAY_LEN( handle->precisions, "%3d, ", frame->quantizationUnitCount );
+    LOG_ARRAY_LEN( handle->precisionsFine, "%3d, ", frame->quantizationUnitCount );
 }
 
-static int decodeScaleFactor0( channel_t *this, BitReaderCxt *br )
+static int decodeScaleFactor0( channel_t *handle, BitReaderCxt *br )
 {
     LOG_FUNCTION();
-    frame_t *frame = this->frame;
-    this->scaleFactorBitlen = ReadInt( br, LDAC_SFCBLENBITS ) + LDAC_MINSFCBLEN_0;
-    this->scaleFactorOffset = ReadInt( br, LDAC_IDSFBITS );
-    this->scaleFactorWeight = ReadInt( br, LDAC_SFCWTBLBITS );
+    frame_t *frame = handle->frame;
+    handle->scaleFactorBitlen = ReadInt( br, LDAC_SFCBLENBITS ) + LDAC_MINSFCBLEN_0;
+    handle->scaleFactorOffset = ReadInt( br, LDAC_IDSFBITS );
+    handle->scaleFactorWeight = ReadInt( br, LDAC_SFCWTBLBITS );
 
-    LOG("scale factor bitlen = %d\n", this->scaleFactorBitlen );
-    LOG("scale factor offset = %d\n", this->scaleFactorOffset );
-    LOG("scale factor weight = %d\n", this->scaleFactorWeight );
+    LOG("scale factor bitlen = %d\n", handle->scaleFactorBitlen );
+    LOG("scale factor offset = %d\n", handle->scaleFactorOffset );
+    LOG("scale factor weight = %d\n", handle->scaleFactorWeight );
 
-    const int mask = (1<<this->scaleFactorBitlen)-1;
-    const uint8_t *weightTable = gaa_sfcwgt_ldac[this->scaleFactorWeight];
-    const HuffmanCodebook* codebook = &HuffmanScaleFactorsUnsigned[this->scaleFactorBitlen];
-    this->scaleFactors[0] = ReadInt( br, this->scaleFactorBitlen );
+    const int mask = (1<<handle->scaleFactorBitlen)-1;
+    const uint8_t *weightTable = gaa_sfcwgt_ldac[handle->scaleFactorWeight];
+    const HuffmanCodebook* codebook = &HuffmanScaleFactorsUnsigned[handle->scaleFactorBitlen];
+    handle->scaleFactors[0] = ReadInt( br, handle->scaleFactorBitlen );
 //    printf("diff =\n    ");
     for( int i=1; i<frame->quantizationUnitCount; ++i )
     {
         int diff = ReadHuffmanValue( codebook, br, 1 );
        
 //        printf("%2d, ", diff );
-        this->scaleFactors[i] = (this->scaleFactors[i-1] + diff) & mask;
-        this->scaleFactors[i-1] += this->scaleFactorOffset - weightTable[i-1]; // cancel weights
+        handle->scaleFactors[i] = (handle->scaleFactors[i-1] + diff) & mask;
+        handle->scaleFactors[i-1] += handle->scaleFactorOffset - weightTable[i-1]; // cancel weights
     }
-    this->scaleFactors[frame->quantizationUnitCount-1] += this->scaleFactorOffset - weightTable[frame->quantizationUnitCount-1];
+    handle->scaleFactors[frame->quantizationUnitCount-1] += handle->scaleFactorOffset - weightTable[frame->quantizationUnitCount-1];
 
-    LOG_ARRAY_LEN( this->scaleFactors, "%2d, ", frame->quantizationUnitCount );
+    LOG_ARRAY_LEN( handle->scaleFactors, "%2d, ", frame->quantizationUnitCount );
     return 0;
 }
 
-static int decodeScaleFactor1( channel_t *this, BitReaderCxt *br )
+static int decodeScaleFactor1( channel_t *handle, BitReaderCxt *br )
 {
     LOG_FUNCTION();
-    frame_t *frame = this->frame;
-    this->scaleFactorBitlen = ReadInt( br, LDAC_SFCBLENBITS ) + LDAC_MINSFCBLEN_1;
+    frame_t *frame = handle->frame;
+    handle->scaleFactorBitlen = ReadInt( br, LDAC_SFCBLENBITS ) + LDAC_MINSFCBLEN_1;
     
-    if( this->scaleFactorBitlen > 4 )
+    if( handle->scaleFactorBitlen > 4 )
     {
         for( int i=0; i<frame->quantizationUnitCount; ++i )
         {
-            this->scaleFactors[i] = ReadInt( br, LDAC_IDSFBITS );
+            handle->scaleFactors[i] = ReadInt( br, LDAC_IDSFBITS );
         }
     } else
     {
-        this->scaleFactorOffset = ReadInt( br, LDAC_IDSFBITS );
-        this->scaleFactorWeight = ReadInt( br, LDAC_SFCWTBLBITS );
-        const uint8_t *weightTable = gaa_sfcwgt_ldac[this->scaleFactorWeight];
+        handle->scaleFactorOffset = ReadInt( br, LDAC_IDSFBITS );
+        handle->scaleFactorWeight = ReadInt( br, LDAC_SFCWTBLBITS );
+        const uint8_t *weightTable = gaa_sfcwgt_ldac[handle->scaleFactorWeight];
         for( int i=0; i<frame->quantizationUnitCount; ++i )
         {
-            this->scaleFactors[i] = ReadInt( br, this->scaleFactorBitlen ) - weightTable[i] + this->scaleFactorOffset;
+            handle->scaleFactors[i] = ReadInt( br, handle->scaleFactorBitlen ) - weightTable[i] + handle->scaleFactorOffset;
         }
     }
     return 0;
 }
 
-int decodeScaleFactor2( channel_t *this, BitReaderCxt *br )
+int decodeScaleFactor2( channel_t *handle, BitReaderCxt *br )
 {
     LOG_FUNCTION();
-    frame_t *frame = this->frame;
+    frame_t *frame = handle->frame;
     channel_t *other = &frame->channels[0];
 
-    this->scaleFactorBitlen = ReadInt( br, LDAC_SFCBLENBITS ) + LDAC_MINSFCBLEN_2;
-    LOG("scale factor bitlen: %d\n", this->scaleFactorBitlen );
-    const HuffmanCodebook* codebook = &HuffmanScaleFactorsSigned[this->scaleFactorBitlen];
+    handle->scaleFactorBitlen = ReadInt( br, LDAC_SFCBLENBITS ) + LDAC_MINSFCBLEN_2;
+    LOG("scale factor bitlen: %d\n", handle->scaleFactorBitlen );
+    const HuffmanCodebook* codebook = &HuffmanScaleFactorsSigned[handle->scaleFactorBitlen];
 //    printf("diff =\n");
     for( int i=0; i<frame->quantizationUnitCount; ++i )
     {
        int diff = ReadHuffmanValue( codebook, br, 1 );
 //       printf("%2d, ", diff );
-       this->scaleFactors[i] = other->scaleFactors[i] + diff;
+       handle->scaleFactors[i] = other->scaleFactors[i] + diff;
     }
     
-    LOG_ARRAY_LEN( this->scaleFactors, "%2d, ", frame->quantizationUnitCount );
+    LOG_ARRAY_LEN( handle->scaleFactors, "%2d, ", frame->quantizationUnitCount );
     return 0;
 }
 
-int decodeScaleFactors( frame_t *this, BitReaderCxt *br, int channelNbr )
+int decodeScaleFactors( frame_t *handle, BitReaderCxt *br, int channelNbr )
 {
     LOG_FUNCTION();
-    channel_t *channel = &this->channels[channelNbr];
+    channel_t *channel = &handle->channels[channelNbr];
     channel->scaleFactorMode = ReadInt( br, LDAC_SFCMODEBITS );
     LOG("scale factor mode = %d\n", channel->scaleFactorMode );
     if( channelNbr == 0 )
@@ -392,23 +392,23 @@ static const char gaa_block_setting_ldac[4][4]=
     {0, 0, 0},
 };
 
-static void pcmFloatToShort( frame_t *this, int16_t *pcmOut )
+static void pcmFloatToShort( frame_t *handle, int16_t *pcmOut )
 {
     int i=0;
-    for(int smpl=0; smpl<this->frameSamples; ++smpl )
+    for(int smpl=0; smpl<handle->frameSamples; ++smpl )
     {
-        for( int ch=0; ch<this->channelCount; ++ch, ++i )
+        for( int ch=0; ch<handle->channelCount; ++ch, ++i )
         {
-            pcmOut[i] = Clamp16(Round(this->channels[ch].pcm[smpl]));
+            pcmOut[i] = Clamp16(Round(handle->channels[ch].pcm[smpl]));
         }
     }
 }
 
 static const int channelConfigIdToChannelCount[] = { 1, 2, 2 };
 
-int ldacdecGetChannelCount( ldacdec_t *this )
+int ldacdecGetChannelCount( ldacdec_t *handle )
 {
-    return channelConfigIdToChannelCount[this->frame.channelConfigId];
+    return channelConfigIdToChannelCount[handle->frame.channelConfigId];
 }
 
 static const unsigned short sampleRateIdToSamplesPower[] = {
@@ -417,46 +417,46 @@ static const unsigned short sampleRateIdToSamplesPower[] = {
 
 static const int sampleRateIdToFrequency[] = { 44100, 48000, 88200, 96000 };
 
-int ldacdecGetSampleRate( ldacdec_t *this )
+int ldacdecGetSampleRate( ldacdec_t *handle )
 {
-    return sampleRateIdToFrequency[this->frame.sampleRateId];
+    return sampleRateIdToFrequency[handle->frame.sampleRateId];
 }
 
-static int decodeFrame( frame_t *this, BitReaderCxt *br )
+static int decodeFrame( frame_t *handle, BitReaderCxt *br )
 {
     int syncWord = ReadInt( br, LDAC_SYNCWORDBITS );
     if( syncWord != LDAC_SYNCWORD )
         return -1;
 
-    this->sampleRateId = ReadInt( br, LDAC_SMPLRATEBITS );
-    this->channelConfigId = ReadInt( br, LDAC_CHCONFIG2BITS );
-    this->frameLength = ReadInt( br, LDAC_FRAMELEN2BITS ) + 1;
-    this->frameStatus = ReadInt( br, LDAC_FRAMESTATBITS );
+    handle->sampleRateId = ReadInt( br, LDAC_SMPLRATEBITS );
+    handle->channelConfigId = ReadInt( br, LDAC_CHCONFIG2BITS );
+    handle->frameLength = ReadInt( br, LDAC_FRAMELEN2BITS ) + 1;
+    handle->frameStatus = ReadInt( br, LDAC_FRAMESTATBITS );
     
-    this->channelCount = channelConfigIdToChannelCount[this->channelConfigId];
-    this->frameSamplesPower = sampleRateIdToSamplesPower[this->sampleRateId];
-    this->frameSamples = 1<<this->frameSamplesPower;
+    handle->channelCount = channelConfigIdToChannelCount[handle->channelConfigId];
+    handle->frameSamplesPower = sampleRateIdToSamplesPower[handle->sampleRateId];
+    handle->frameSamples = 1<<handle->frameSamplesPower;
 
-    this->channels[0].mdct.Bits = this->frameSamplesPower;
-    this->channels[1].mdct.Bits = this->frameSamplesPower;
+    handle->channels[0].mdct.Bits = handle->frameSamplesPower;
+    handle->channels[1].mdct.Bits = handle->frameSamplesPower;
 
-    LOG("sampleRateId:    %d\n", this->sampleRateId );
-    LOG("   sample rate:  %d\n", sampleRateIdToFrequency[this->sampleRateId] );
-    LOG("   samplePower:  %d\n", this->frameSamplesPower );
-    LOG("channelConfigId: %d\n", this->channelConfigId );
-    LOG("frameLength:     %d\n", this->frameLength );
-    LOG("frameStatus:     %d\n", this->frameStatus );
+    LOG("sampleRateId:    %d\n", handle->sampleRateId );
+    LOG("   sample rate:  %d\n", sampleRateIdToFrequency[handle->sampleRateId] );
+    LOG("   samplePower:  %d\n", handle->frameSamplesPower );
+    LOG("channelConfigId: %d\n", handle->channelConfigId );
+    LOG("frameLength:     %d\n", handle->frameLength );
+    LOG("frameStatus:     %d\n", handle->frameStatus );
 
     return 0;
 }
 
-int ldacDecode( ldacdec_t *this, uint8_t *stream, int16_t *pcm, int *bytesUsed )
+int ldacDecode( ldacdec_t *handle, uint8_t *stream, int16_t *pcm, int *bytesUsed )
 {
     BitReaderCxt brObject;
     BitReaderCxt *br = &brObject;
     InitBitReaderCxt( br, stream );
 
-    frame_t *frame = &this->frame;
+    frame_t *frame = &handle->frame;
    
     int ret = decodeFrame( frame, br );
     if( ret < 0 )
@@ -503,9 +503,9 @@ static const uint8_t saa_null_data_ldac[2][15] = {
     {0x07, 0xa0, 0x0a, 0x00, 0x20, 0xad, 0x51, 0x41, 0x24, 0x93, 0x00, 0x28, 0xa0, 0x92, 0x49},
 };
 
-int ldacNullPacket( ldacdec_t *this, uint8_t *output, int *bytesUsed )
+int ldacNullPacket( ldacdec_t *handle, uint8_t *output, int *bytesUsed )
 {
-    frame_t *frame = &this->frame;
+    frame_t *frame = &handle->frame;
     uint8_t *ptr = output;
 
     for( int block = 0; block<gaa_block_setting_ldac[frame->channelConfigId][1]; ++block )
@@ -517,4 +517,6 @@ int ldacNullPacket( ldacdec_t *this, uint8_t *output, int *bytesUsed )
     }
 
     *bytesUsed = frame->frameLength + 3;
+
+    return 0;
 }

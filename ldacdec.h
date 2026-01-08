@@ -1,26 +1,25 @@
 #ifndef __LDACDEC_H_
 #define __LDACDEC_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MAX_QUANT_UNITS     (34)
 #define MAX_FRAME_SAMPLES   (256)
 
 #include "log.h"
 #include "imdct.h"
+#include <stddef.h>
+#include <stdint.h>
 
-#define container_of( ptr, type, member ) ({                \
-        const typeof( ((type*)0)->member ) *__mptr = (ptr); \
-        (type *)((char*)__ptr - offsetof(type, memeber));   \
-        })
+#ifndef container_of
+#define container_of(ptr, type, member) \
+    ((type *)((char *)(ptr) - offsetof(type, member)))
+#endif
 
-#define min( a, b )             \
-    ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-       _a < _b ? _a : _b; });
-
-#define max( a, b )             \
-    ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-       _a > _b ? _a : _b; });
+#define LDAC_MIN( a, b ) ( (a) < (b) ? (a) : (b) )
+#define LDAC_MAX( a, b ) ( (a) > (b) ? (a) : (b) )
 
 typedef struct Frame frame_t;
 typedef struct Channel channel_t;
@@ -76,10 +75,14 @@ typedef struct {
 
 } ldacdec_t;
 
-int ldacdecInit( ldacdec_t *this );
-int ldacDecode( ldacdec_t *this, uint8_t *stream, int16_t *pcm, int *bytesUsed );
-int ldacNullPacket( ldacdec_t *this, uint8_t *output, int *bytesUsed );
-int ldacdecGetSampleRate( ldacdec_t *this );
-int ldacdecGetChannelCount( ldacdec_t *this );
+int ldacdecInit( ldacdec_t *handle );
+int ldacDecode( ldacdec_t *handle, uint8_t *stream, int16_t *pcm, int *bytesUsed );
+int ldacNullPacket( ldacdec_t *handle, uint8_t *output, int *bytesUsed );
+int ldacdecGetSampleRate( ldacdec_t *handle );
+int ldacdecGetChannelCount( ldacdec_t *handle );
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __LDACDEC_H_
